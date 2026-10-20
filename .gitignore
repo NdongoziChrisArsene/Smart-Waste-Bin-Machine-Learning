@@ -1,0 +1,7 @@
+.env
+.myvenv/
+.venv/
+__pycache__/
+.streamlit/secrets.toml
+*.pyc
+smart_city_sensor_data.csv

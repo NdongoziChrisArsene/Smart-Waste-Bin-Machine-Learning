@@ -1,0 +1,30 @@
+{
+  "data_source": "Kaggle smart-city dataset (waste sensors)",
+  "rows": 14295,
+  "full_level_pct": 46.0,
+  "weight": "simulated from fill %",
+  "baseline": {
+    "MAE_h": 12.93,
+    "RMSE_h": 16.31,
+    "R2": 0.857
+  },
+  "mlr": {
+    "MAE_h": 4.81,
+    "RMSE_h": 6.28,
+    "R2": 0.979
+  },
+  "ridge": {
+    "MAE_h": 4.81,
+    "RMSE_h": 6.29,
+    "R2": 0.979
+  },
+  "coefficients": {
+    "fill_pct": -0.007456869443470706,
+    "weight_kg": 0.027236093095627578,
+    "hours_since_collection": -0.9917927238071238,
+    "avg_fill_rate": -0.06599761882216242,
+    "hour": 0.007094057021092858,
+    "is_weekend": 1.130828528884999
+  },
+  "intercept": 148.650939939222
+}
