@@ -116,7 +116,7 @@ with tab3:
         st.caption("The Predict and Model tabs still work. Check DATABASE_URL in the app's Secrets.")
     else:
         if mode == "sqlite":
-            st.info("Demo mode: PostgreSQL is not connected, so this tab shows the bundled read-only copy of the data. "
+            st.info("Demo mode: PostgreSQL is connected, so this tab shows to Admin bundled read-only copy of the data and a downloadable .csv file. "
                     "Creating users needs PostgreSQL.")
         can_login = mode == "postgres" or db.demo_login_configured()
         if not can_login:
