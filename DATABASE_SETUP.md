@@ -15,7 +15,7 @@ If the status is `Stopped`, start it with `Start-Service <name shown>` (open Pow
 Copy `db.py`, `setup_db.py`, `app.py` (replace the old one), `requirements.txt`, `.env.example` and `.gitignore`
 into the same folder as your notebook. Then, in your activated environment:
 
-    pip install -r requirements.txt
+    pip install -r requirements-dev.txt
 
 ## 3. Create your .env
     Copy-Item .env.example .env
@@ -64,5 +64,5 @@ Then try: `SELECT * FROM waste_readings LIMIT 10;` and `SELECT username, role FR
 - **connection refused / timeout:** the service is stopped, or the port in `.env` is wrong (`DB_PORT`).
 - **password authentication failed for user "postgres":** `PG_SUPERPASS` is wrong.
 - **role/database already exists:** fine, the script updates what exists.
-- **ModuleNotFoundError: psycopg:** run `pip install -r requirements.txt` inside the activated environment.
+- **ModuleNotFoundError: psycopg:** run `pip install -r requirements-dev.txt` inside the activated environment.
 - **The Admin tab says PostgreSQL is not reachable:** the Predict tab still works. Fix the error shown and reload.

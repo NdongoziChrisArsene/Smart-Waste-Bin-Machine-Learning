@@ -1,57 +1,71 @@
-# Hosting the app online (Streamlit Community Cloud + cloud PostgreSQL)
+# Putting the app online (Streamlit Community Cloud)
 
-## Why the Admin tab shows "PostgreSQL is not reachable" online
-The PostgreSQL you installed runs **on your own computer** (`localhost`). A hosted app runs on Streamlit's servers,
-where there is no PostgreSQL at `localhost`, and your `.env` file is not uploaded (it is in `.gitignore`).
-The Predict and Model tabs work online, because they only need the files in `artifacts/`.
-To make the Admin tab work online you need a database that is reachable from the internet.
+## What was wrong
+The PostgreSQL you installed runs on **your computer**. The online app runs on Streamlit's servers, where there is no
+PostgreSQL at `localhost`, and your `.env` is (correctly) not uploaded. So the Admin tab could not connect.
+The Predict and Model tabs never needed the database.
 
-## Step 1. Create a cloud PostgreSQL database
-Use a hosted PostgreSQL service (for example Neon or Supabase; check each one's current free-plan limits).
-Create a project and copy its **connection string**. It looks like:
+## What the app does now
+The Admin tab picks what to use automatically:
 
-    postgresql://USER:PASSWORD@HOST:5432/DBNAME?sslmode=require
+| Situation | What you get |
+|---|---|
+| PostgreSQL works (your PC, or `DATABASE_URL` set) | Full Admin tab: login from the `app_users` table, data table, CSV download, user management |
+| No PostgreSQL, no `DATABASE_URL` (the default online) | **Demo mode**: read-only copy of the data from `artifacts/waste_bin.db`, one admin login from Secrets, no user management |
+| `DATABASE_URL` set but not working | A short, safe error message (no server names). Predict and Model tabs still work |
 
-Keep it secret. Anyone who has it can read and change your data.
+Predictions use the coefficients saved in `artifacts/metrics.json`, so the online app no longer needs scikit-learn
+or the `.pkl` file. It only needs `pandas`, `streamlit` and `psycopg`.
 
-## Step 2. Load your data into it (from your PC)
-Add to your local `.env` (keep the other lines, or leave them unused):
+## Option A: demo mode online (no extra service, works today)
+1. Push the updated files to GitHub (commands below).
+2. In Streamlit Community Cloud open your app > **Manage app** > **Settings** > **Secrets** and paste:
 
-    DATABASE_URL=postgresql://USER:PASSWORD@HOST:5432/DBNAME?sslmode=require
-    APP_ADMIN_USER=admin
-    APP_ADMIN_PASSWORD=choose-a-STRONG-password
+       APP_ADMIN_USER = "admin"
+       APP_ADMIN_PASSWORD = "choose-a-strong-password"
 
-Then run, in the activated environment:
+3. Save. The app restarts. Open the Admin tab: you see the blue "Demo mode" note and the login form.
 
-    python setup_db.py
+## Option B: full PostgreSQL online
+1. Create a cloud PostgreSQL database (for example Neon or Supabase) and copy its connection string:
 
-It creates the tables, loads the 14,295 rows, and creates your admin login in the cloud database.
-(To use your local PostgreSQL again, put `#` in front of the `DATABASE_URL` line.)
+       postgresql://USER:PASSWORD@HOST:5432/DBNAME?sslmode=require
 
-## Step 3. Give the hosted app the same settings
-In Streamlit Community Cloud: open your app > **Manage app** > **Settings** > **Secrets**, and paste:
+2. On your PC add to `.env`, then run `python setup_db.py` (it creates the tables, loads the data, creates your admin):
 
-    DATABASE_URL = "postgresql://USER:PASSWORD@HOST:5432/DBNAME?sslmode=require"
+       DATABASE_URL=postgresql://USER:PASSWORD@HOST:5432/DBNAME?sslmode=require
+       APP_ADMIN_USER=admin
+       APP_ADMIN_PASSWORD=choose-a-strong-password
 
-Save. The app restarts and the Admin tab should show the login form.
-Never put the connection string in GitHub.
+   Put a `#` in front of the `DATABASE_URL` line to go back to your local PostgreSQL.
+3. In the app's **Secrets** paste only:
 
-## Step 4. Check the repository
-The GitHub repo that Streamlit deploys must contain `app.py`, `db.py`, `requirements.txt` (with `psycopg[binary]`)
-and the `artifacts/` folder (`bin_model.pkl`, `metrics.json`, the PNG files). It must NOT contain `.env`.
-Replace `db.py` and `setup_db.py` with the new versions, then commit and push. Streamlit redeploys automatically.
+       DATABASE_URL = "postgresql://USER:PASSWORD@HOST:5432/DBNAME?sslmode=require"
 
-## Security notes (the app is public now)
-- Use strong, unique passwords for the cloud database and for `APP_ADMIN_PASSWORD`. Do not reuse the short ones from testing.
-- In hosted mode the app uses the one database user your provider gave you, so there is no separate read-only role.
-  The app code only reads readings and adds users, but protect the connection string.
-- The login lockout (5 tries) works per browser session only. It slows guessing but does not stop a determined attacker.
-- If you shared any password or connection string in a chat or a screenshot, change it.
+## Pushing the update to GitHub
+From the project folder:
+
+    git add app.py db.py setup_db.py requirements.txt requirements-dev.txt HOSTING.md README.md DATABASE_SETUP.md
+    git status
+    git commit -m "Hosted-friendly Admin tab and slim requirements"
+    git push
+
+Check that `git status` does NOT list `.env`. Streamlit redeploys on every push. If it does not,
+use **Manage app** > the three-dot menu > **Reboot app**.
+
+## Files
+- `requirements.txt`: what the **online** app installs (pandas, streamlit, psycopg). Kept small on purpose.
+- `requirements-dev.txt`: for your PC (adds scikit-learn, matplotlib, jupyter). Use `pip install -r requirements-dev.txt`.
+
+## Security notes
+- The app is public: use strong, unique passwords, and not the short ones used for testing.
+- If a password or connection string appeared in a chat or screenshot, change it.
+- The 5-attempt lockout works per browser session only; it slows guessing, it does not stop a determined attacker.
+- Secrets are only stored in Streamlit's Settings. Never commit them.
 
 ## Troubleshooting
-- **SSL error / "connection requires SSL":** make sure the URL ends with `?sslmode=require`.
-- **password authentication failed:** copy the connection string again from the provider.
-- **ModuleNotFoundError: psycopg:** `requirements.txt` in the repo root must include `psycopg[binary]`.
-- **scikit-learn version warning online:** pin the version you use locally in `requirements.txt`
-  (see it with `pip show scikit-learn`, then add a line such as `scikit-learn==1.9.1`).
-- **First load is slow:** some free plans pause idle databases and need a few seconds to wake.
+- **"Admin login is not set up":** add `APP_ADMIN_USER` and `APP_ADMIN_PASSWORD` to Secrets (Option A).
+- **"the database refused the user name or password":** copy the connection string again.
+- **"requires SSL":** the URL must end with `?sslmode=require`.
+- **ModuleNotFoundError: psycopg:** `requirements.txt` in the repo root must contain `psycopg[binary]`.
+- **Logs:** Manage app > Logs shows the full technical error (visitors never see it).

@@ -2,7 +2,6 @@ import json
 import datetime as dt
 from pathlib import Path
 
-import joblib
 import pandas as pd
 import streamlit as st
 
@@ -12,37 +11,35 @@ ART = Path(__file__).parent / "artifacts"
 st.set_page_config(page_title="Smart Waste-Bin", page_icon="🗑️", layout="centered")
 
 
-@st.cache_resource
-def load_model():
-    return joblib.load(ART / "bin_model.pkl")
-
-
 @st.cache_data
 def load_metrics():
     return json.load(open(ART / "metrics.json"))
 
 
-def predict_hours(bundle, fill, weight, now, last_collection):
-    hours_since = max((now - last_collection).total_seconds() / 3600, bundle["min_hours"])
-    row = pd.DataFrame([{
+def predict_hours(metrics, fill, weight, now, last_collection):
+    """Multiple Linear Regression: intercept + sum(coefficient * feature). Uses the numbers saved in metrics.json."""
+    hours_since = max((now - last_collection).total_seconds() / 3600, metrics.get("min_hours", 1))
+    x = {
         "fill_pct": fill,
         "weight_kg": weight,
         "hours_since_collection": hours_since,
         "avg_fill_rate": fill / hours_since,
         "hour": now.hour,
         "is_weekend": int(now.weekday() >= 5),
-    }])[bundle["features"]]
-    return max(float(bundle["model"].predict(row)[0]), 0.0), hours_since
+    }
+    prediction = metrics["intercept"] + sum(coef * x[name] for name, coef in metrics["coefficients"].items())
+    return max(float(prediction), 0.0), hours_since
 
 
 st.title("🗑️ Smart Waste-Bin System")
 st.caption("Predicts how long until the bin is full (Multiple Linear Regression)")
 
-if not (ART / "bin_model.pkl").exists():
+if not (ART / "metrics.json").exists():
     st.error("Model not found. Run the training notebook first so it creates the `artifacts/` folder.")
     st.stop()
 
-bundle, metrics = load_model(), load_metrics()
+metrics = load_metrics()
+FULL_LEVEL = metrics.get("full_level_pct", 80)
 if "history" not in st.session_state:
     st.session_state.history = []
 
@@ -72,8 +69,8 @@ with tab1:
         if last_collection >= now:
             st.error("The last collection must be before the current time.")
         else:
-            threshold = bundle["full_threshold"]
-            hours, since = predict_hours(bundle, fill, weight, now, last_collection)
+            threshold = FULL_LEVEL
+            hours, since = predict_hours(metrics, fill, weight, now, last_collection)
             st.progress(fill / 100, text=f"Fill level: {fill}%")
             if fill >= threshold:
                 st.error(f"Bin is already at or above {threshold}%. Collect now.")
@@ -97,7 +94,7 @@ with tab1:
 with tab2:
     st.write(f"**Data source:** {metrics['data_source']}  |  **Rows used:** {metrics['rows']}")
     st.write(f"**Weight:** {metrics['weight']}")
-    st.write(f"Bin counts as full at **{bundle['full_threshold']}%**.")
+    st.write(f"Bin counts as full at **{FULL_LEVEL:.0f}%**.")
     st.markdown("**Test-set results (hours)**")
     st.dataframe(pd.DataFrame({"Baseline (fill % only)": metrics["baseline"],
                                "MLR (all features)": metrics["mlr"],
@@ -111,18 +108,22 @@ with tab2:
 
 with tab3:
     st.subheader("Database access")
-    try:
-        db.connect("app").close()
-        db_ok = True
-    except Exception as exc:
-        db_ok = False
-        st.warning("PostgreSQL is not reachable. Check that the service is running and that .env is filled in "
-                   "(then run `python setup_db.py`).")
-        st.caption(f"Details: {exc}")
+    state = db.status()
+    mode = state["mode"]
 
-    if db_ok:
+    if mode == "error":
+        st.error(f"The database is configured but not working: {state['message']}")
+        st.caption("The Predict and Model tabs still work. Check DATABASE_URL in the app's Secrets.")
+    else:
+        if mode == "sqlite":
+            st.info("Demo mode: PostgreSQL is not connected, so this tab shows the bundled read-only copy of the data. "
+                    "Creating users needs PostgreSQL.")
+        can_login = mode == "postgres" or db.demo_login_configured()
+        if not can_login:
+            st.warning("Admin login is not set up. Add APP_ADMIN_USER and APP_ADMIN_PASSWORD to the app's Secrets.")
+
         st.session_state.setdefault("fails", 0)
-        if "user" not in st.session_state:
+        if can_login and "user" not in st.session_state:
             if st.session_state.fails >= 5:
                 st.error("Too many failed attempts in this session. Reload the page to try again.")
             else:
@@ -138,7 +139,7 @@ with tab3:
                     else:
                         st.session_state.fails += 1
                         st.error("Wrong username or password.")
-        else:
+        elif can_login:
             c1, c2 = st.columns([3, 1])
             c1.write(f"Logged in as **{st.session_state.user}** ({st.session_state.role})")
             if c2.button("Log out"):
@@ -155,7 +156,7 @@ with tab3:
                                pd.DataFrame(db.fetch_readings(), columns=cols).to_csv(index=False),
                                "waste_readings.csv", "text/csv")
 
-            if st.session_state.role == "admin":
+            if mode == "postgres" and st.session_state.role == "admin":
                 st.divider()
                 st.markdown("**User management (admin only)**")
                 st.dataframe(pd.DataFrame(db.list_users(), columns=["username", "role", "created"]), hide_index=True)

@@ -9,6 +9,8 @@ import hashlib
 import hmac
 import os
 import secrets
+import sqlite3
+import time
 from pathlib import Path
 
 import psycopg
@@ -45,6 +47,10 @@ def load_streamlit_secrets():
 load_streamlit_secrets()
 
 
+SQLITE_PATH = Path(__file__).parent / "artifacts" / "waste_bin.db"
+_status_cache = {"at": 0.0, "value": None}
+
+
 def hosted():
     """True when one DATABASE_URL (a cloud database) is used instead of local roles."""
     return bool(os.environ.get("DATABASE_URL"))
@@ -63,6 +69,51 @@ def connect(who="app", dbname=None):
         user, password, name = env.get("DB_APP_USER", "waste_app"), env.get("DB_APP_PASSWORD", ""), dbname or env.get("DB_NAME", "waste_bin")
     return psycopg.connect(host=env.get("DB_HOST", "localhost"), port=int(env.get("DB_PORT", "5432")),
                            dbname=name, user=user, password=password, connect_timeout=5)
+
+
+# ---------- which database are we using? ----------
+def _explain(exc):
+    """A short, safe message for visitors. Never includes host names, addresses or passwords."""
+    text = str(exc).lower()
+    if "password authentication failed" in text or "authentication failed" in text:
+        return "the database refused the user name or password."
+    if "ssl" in text:
+        return "the database requires SSL. Add ?sslmode=require to DATABASE_URL."
+    if "does not exist" in text:
+        return "the database name in the connection string does not exist."
+    return "the database server could not be reached."
+
+
+def status():
+    """Return {'mode': 'postgres' | 'sqlite' | 'error', 'message': str}. Cached for 30 seconds.
+
+    postgres : PostgreSQL works (DATABASE_URL in the cloud, or the local server on your PC)
+    sqlite   : no PostgreSQL available, so the bundled read-only copy artifacts/waste_bin.db is used (demo mode)
+    error    : a cloud DATABASE_URL is set but does not work (we do not hide that by falling back)
+    """
+    now = time.time()
+    if _status_cache["value"] is not None and now - _status_cache["at"] < 30:
+        return _status_cache["value"]
+    try:
+        connect("app").close()
+        result = {"mode": "postgres", "message": ""}
+    except Exception as exc:
+        if hosted():
+            result = {"mode": "error", "message": _explain(exc)}
+        elif SQLITE_PATH.exists():
+            result = {"mode": "sqlite", "message": ""}
+        else:
+            result = {"mode": "error", "message": "PostgreSQL is not running and artifacts/waste_bin.db was not found."}
+    _status_cache.update(at=now, value=result)
+    return result
+
+
+def demo_login_configured():
+    return bool(os.environ.get("APP_ADMIN_USER") and os.environ.get("APP_ADMIN_PASSWORD"))
+
+
+def _sqlite():
+    return sqlite3.connect(SQLITE_PATH.resolve().as_uri() + "?mode=ro", uri=True)      # read-only
 
 
 # ---------- passwords ----------
@@ -84,6 +135,12 @@ def verify_password(password, stored):
 # ---------- app users ----------
 def authenticate(username, password):
     """Return the user's role if the credentials are right, otherwise None."""
+    if status()["mode"] == "sqlite":                      # demo mode: one admin login from Secrets / .env
+        expected_user = os.environ.get("APP_ADMIN_USER", "")
+        expected_pw = os.environ.get("APP_ADMIN_PASSWORD", "")
+        ok_user = hmac.compare_digest(username.encode(), expected_user.encode())
+        ok_pw = hmac.compare_digest(password.encode(), expected_pw.encode())
+        return "admin" if (expected_user and expected_pw and ok_user and ok_pw) else None
     with connect("app") as con:
         row = con.execute("SELECT password_hash, role FROM app_users WHERE username = %s", (username,)).fetchone()
     if row is None:
@@ -93,6 +150,8 @@ def authenticate(username, password):
 
 
 def create_user(username, password, role="viewer"):
+    if status()["mode"] != "postgres":
+        raise ValueError("Creating users needs PostgreSQL (not available in demo mode).")
     if role not in ROLES:
         raise ValueError("Role must be 'admin' or 'viewer'.")
     if len(username) < 3 or len(password) < 8:
@@ -106,6 +165,8 @@ def create_user(username, password, role="viewer"):
 
 
 def list_users():
+    if status()["mode"] != "postgres":
+        return []
     with connect("app") as con:
         return con.execute("SELECT username, role, created_at FROM app_users ORDER BY id").fetchall()
 
@@ -116,11 +177,23 @@ READING_COLUMNS = ["sensor_id", "ts", "fill_pct", "weight_kg", "hours_since_coll
 
 
 def count_readings():
+    if status()["mode"] == "sqlite":
+        with _sqlite() as con:
+            return con.execute("SELECT COUNT(*) FROM waste_readings").fetchone()[0]
     with connect("app") as con:
         return con.execute("SELECT COUNT(*) FROM waste_readings").fetchone()[0]
 
 
 def fetch_readings(limit=None):
+    if status()["mode"] == "sqlite":
+        sql = ("SELECT Sensor_ID AS sensor_id, Timestamp AS ts, fill_pct, weight_kg, hours_since_collection, "
+               "avg_fill_rate, hour, is_weekend, hours_to_full FROM waste_readings ORDER BY Timestamp")
+        params = ()
+        if limit:
+            sql += " LIMIT ?"
+            params = (int(limit),)
+        with _sqlite() as con:
+            return con.execute(sql, params).fetchall()
     sql = f"SELECT {', '.join(READING_COLUMNS)} FROM waste_readings ORDER BY ts"
     params = ()
     if limit:

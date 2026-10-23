@@ -13,7 +13,7 @@ stored in PostgreSQL, deployed as a Streamlit app with an admin login. No Raspbe
 - `DATABASE_SETUP.md`: PostgreSQL steps for Windows
 
 ## Run it
-1. Create and activate an environment, then `pip install -r requirements.txt`
+1. Create and activate an environment, then `pip install -r requirements-dev.txt`
 2. Run the notebook (Kernel > Restart Kernel and Run All Cells). It recreates `artifacts/`.
 3. PostgreSQL: follow `DATABASE_SETUP.md` (`.env`, then `python setup_db.py`)
 4. `streamlit run app.py`

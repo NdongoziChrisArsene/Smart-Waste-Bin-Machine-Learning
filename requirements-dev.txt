@@ -1,0 +1,7 @@
+# For your own PC: training notebook + everything the hosted app needs
+-r requirements.txt
+scikit-learn
+matplotlib
+joblib
+jupyter
+ipykernel
