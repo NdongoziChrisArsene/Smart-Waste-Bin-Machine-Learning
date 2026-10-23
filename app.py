@@ -117,7 +117,7 @@ with tab3:
     else:
         if mode == "sqlite":
             st.info("Demo mode: PostgreSQL is connected, so this tab shows to Admin bundled read-only copy of the data and a downloadable .csv file. "
-                    "You don't need to Signup insteady you have to Login by Credial registered in the PostgreSQL.")
+                    "You don't need to Signup insteady you have to Login by Credential registered in the PostgreSQL.")
         can_login = mode == "postgres" or db.demo_login_configured()
         if not can_login:
             st.warning("Admin login is not set up. Add APP_ADMIN_USER and APP_ADMIN_PASSWORD to the app's Secrets.")
