@@ -31,9 +31,30 @@ def load_env(path=None):
 load_env()
 
 
+def load_streamlit_secrets():
+    """On Streamlit Community Cloud the settings come from the app's Secrets, not from a .env file."""
+    try:
+        import streamlit as st
+        for key, value in st.secrets.items():
+            if isinstance(value, str):
+                os.environ.setdefault(key, value)
+    except Exception:
+        pass
+
+
+load_streamlit_secrets()
+
+
+def hosted():
+    """True when one DATABASE_URL (a cloud database) is used instead of local roles."""
+    return bool(os.environ.get("DATABASE_URL"))
+
+
 def connect(who="app", dbname=None):
     """who = 'app' | 'admin' | 'super' (super is only for setup_db.py)."""
     env = os.environ
+    if hosted() and who != "super":
+        return psycopg.connect(env["DATABASE_URL"], connect_timeout=10)
     if who == "super":
         user, password, name = env.get("PG_SUPERUSER", "postgres"), env.get("PG_SUPERPASS", ""), dbname or "postgres"
     elif who == "admin":

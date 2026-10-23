@@ -79,6 +79,32 @@ def create_tables_and_permissions(dbname, admin_user, app_user):
     print("Tables and permissions ready")
 
 
+def create_tables_hosted():
+    """Cloud database: the provider already gave us a database and one user, so only create the tables."""
+    with db.connect("admin") as con:
+        con.execute("""
+            CREATE TABLE IF NOT EXISTS waste_readings (
+                id BIGSERIAL PRIMARY KEY,
+                sensor_id TEXT NOT NULL,
+                ts TIMESTAMP NOT NULL,
+                fill_pct DOUBLE PRECISION,
+                weight_kg DOUBLE PRECISION,
+                hours_since_collection DOUBLE PRECISION,
+                avg_fill_rate DOUBLE PRECISION,
+                hour SMALLINT,
+                is_weekend SMALLINT,
+                hours_to_full DOUBLE PRECISION)""")
+        con.execute("CREATE INDEX IF NOT EXISTS idx_waste_readings_ts ON waste_readings (ts)")
+        con.execute("""
+            CREATE TABLE IF NOT EXISTS app_users (
+                id SERIAL PRIMARY KEY,
+                username TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                role TEXT NOT NULL CHECK (role IN ('admin', 'viewer')),
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now())""")
+    print("Tables ready (cloud database)")
+
+
 def load_readings():
     if not SQLITE_PATH.exists():
         sys.exit("artifacts/waste_bin.db not found. Run the notebook first.")
@@ -113,6 +139,12 @@ if __name__ == "__main__":
     try:
         if "--reload" in sys.argv:
             load_readings()
+        elif db.hosted():
+            print("Using DATABASE_URL (cloud database): roles and database are managed by your provider.")
+            create_tables_hosted()
+            load_readings()
+            create_first_admin()
+            print("\nDone. Add the same settings to your Streamlit app's Secrets (see HOSTING.md).")
         else:
             names = create_roles_and_database()
             create_tables_and_permissions(*names)
