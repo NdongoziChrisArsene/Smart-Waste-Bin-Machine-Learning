@@ -68,7 +68,7 @@ with tab1:
                                   n2.time_input("Now: time", dt.datetime.now().time().replace(second=0, microsecond=0)))
     last_collection = dt.datetime.combine(last_date, last_time)
 
-    if st.button("Predict time until full", type="primary"):
+    if st.button("Predict level until full", type="primary"):
         if last_collection >= now:
             st.error("The last collection must be before the current time.")
         else:
@@ -88,8 +88,7 @@ with tab1:
                     st.success("No urgent collection needed.")
                 result = f"{h} h {m} min"
             st.session_state.history.append({
-                "Time": f"{now:%d %b %H:%M}", "Fill %": fill, "Weight kg": weight,
-                "Hours since collection": round(since, 1), "Result": result})
+                "Time": f"{now:%d %b %H:%M}", "Fill %": fill, "Weight kg": weight})
 
     if st.session_state.history:
         st.markdown("**This session**")
