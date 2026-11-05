@@ -32,7 +32,10 @@ def predict_hours(metrics, fill, weight, now, last_collection):
 
 
 st.title("🗑️ Smart Waste-Bin System")
-st.caption("Shows how much room is left in the bin and when it reaches the collection level (Multiple Linear Regression)")
+st.caption(
+    "Shows how much room is left in the bin and predicts when it reaches "
+    "the collection level (Multiple Linear Regression)."
+)
 
 if not (ART / "metrics.json").exists():
     st.error("Model not found. Run the training notebook first so it creates the `artifacts/` folder.")
@@ -57,7 +60,7 @@ with tab1:
     f2.metric("Collection level", f"{FULL_LEVEL:.0f} %  ({FULL_LEVEL / 100 * CAP_KG:.0f} kg)")
     st.progress(min(fill / 100, 1.0), text=f"{weight:.0f} kg of {CAP_KG:.0f} kg")
 
-    st.markdown("**Last collection (when the bin was emptied)**")
+    st.markdown("**Current collection (the current level of the waste in the bin)**")
     d1, d2 = st.columns(2)
     default_last = dt.datetime.now() - dt.timedelta(hours=24)
     last_date = d1.date_input("Date", default_last.date())
