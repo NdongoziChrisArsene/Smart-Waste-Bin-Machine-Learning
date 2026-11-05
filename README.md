@@ -1,4 +1,4 @@
-# Smart Waste-Bin System: time until the bin is full
+# Smart Waste-Bin System: level until the bin is full
 
 Multiple Linear Regression trained on the Kaggle "Synthetic Smart City Infrastructure Sensor Data" (waste sensor),
 stored in PostgreSQL, deployed as a Streamlit app with an admin login. No Raspberry Pi or circuit needed.
@@ -23,6 +23,11 @@ The Predict tab works without PostgreSQL. Only the Admin tab needs it.
 ## Method
 - Cleaning: duplicates removed, sensor spikes removed, short gaps interpolated.
 - Collections are detected where smoothed fill % drops by more than 20 points (this bin is emptied about weekly).
-- "Full" level = 90% of the bin's typical peak fill (about 46% in this dataset). Change `FULL_THRESHOLD` in the notebook to use a fixed value.
+- Fill % is rescaled so the bin's usual weekly peak (about 54% on the raw sensor scale) counts as 100% capacity; "full" is 80% of capacity. In the notebook, `CALIBRATE = False` and `FULL_THRESHOLD = "auto"` restore the raw-scale behaviour (full at about 46%).
 - Target `hours_to_full`; features: fill %, weight (simulated, the dataset has none), hours since collection, average fill rate, hour, weekend flag.
 - Time-based split (oldest 80% train, newest 20% test). Metrics: MAE, RMSE, R2.
+
+## Weight and fill level
+The operator enters the weight (kg). The fill level is calculated automatically: weight / bin capacity (200 kg = 100%).
+The app shows the level remaining before the 80% collection level and the free space in the bin.
+The capacity is the `BIN_CAPACITY_KG` setting in the notebook; the app reads it from `artifacts/metrics.json`.

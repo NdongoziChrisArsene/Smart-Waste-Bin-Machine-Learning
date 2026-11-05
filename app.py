@@ -32,7 +32,7 @@ def predict_hours(metrics, fill, weight, now, last_collection):
 
 
 st.title("🗑️ Smart Waste-Bin System")
-st.caption("Predicts how long until the bin is full (Multiple Linear Regression)")
+st.caption("Shows how much room is left in the bin and when it reaches the collection level (Multiple Linear Regression)")
 
 if not (ART / "metrics.json").exists():
     st.error("Model not found. Run the training notebook first so it creates the `artifacts/` folder.")
@@ -46,9 +46,16 @@ if "history" not in st.session_state:
 tab1, tab2, tab3 = st.tabs(["Predict", "Model and data", "Admin"])
 
 with tab1:
-    c1, c2 = st.columns(2)
-    fill = c1.slider("Current fill level (%)", 0, 100, 40)
-    weight = c2.number_input("Current weight (kg)", 0.0, 100.0, 8.0, step=0.5)
+    CAP_KG = float(metrics.get("bin_capacity_kg", 200))
+    SOON_LEVEL = FULL_LEVEL - 15
+
+    weight = st.number_input(f"Current weight in the bin (kg). The bin holds {CAP_KG:.0f} kg when 100% full.",
+                             0.0, CAP_KG, 40.0, step=1.0)
+    fill = round(weight / CAP_KG * 100, 1)                       # the fill level is calculated from the weight
+    f1, f2 = st.columns(2)
+    f1.metric("Current fill level (automatic)", f"{fill:.1f} %")
+    f2.metric("Collection level", f"{FULL_LEVEL:.0f} %  ({FULL_LEVEL / 100 * CAP_KG:.0f} kg)")
+    st.progress(min(fill / 100, 1.0), text=f"{weight:.0f} kg of {CAP_KG:.0f} kg")
 
     st.markdown("**Last collection (when the bin was emptied)**")
     d1, d2 = st.columns(2)
@@ -65,27 +72,29 @@ with tab1:
                                   n2.time_input("Now: time", dt.datetime.now().time().replace(second=0, microsecond=0)))
     last_collection = dt.datetime.combine(last_date, last_time)
 
-    if st.button("Predict level until full", type="primary"):
+    if st.button("Predict remaining level", type="primary"):
         if last_collection >= now:
             st.error("The last collection must be before the current time.")
         else:
-            threshold = FULL_LEVEL
-            hours, since = predict_hours(metrics, fill, weight, now, last_collection)
-            st.progress(fill / 100, text=f"Fill level: {fill}%")
-            if fill >= threshold:
-                st.error(f"Bin is already at or above {threshold}%. Collect now.")
-                result = "Full: collect now"
+            remaining = max(FULL_LEVEL - fill, 0.0)                  # % left before the collection level
+            free_space = max(100 - fill, 0.0)                        # % of the whole bin still empty
+            r1, r2 = st.columns(2)
+            r1.metric(f"Level remaining before collection ({FULL_LEVEL:.0f}%)", f"{remaining:.1f} %")
+            r1.caption(f"about {remaining / 100 * CAP_KG:.0f} kg more can be added")
+            r2.metric("Free space in the bin", f"{free_space:.1f} %")
+            r2.caption(f"about {free_space / 100 * CAP_KG:.0f} kg of {CAP_KG:.0f} kg")
+            if fill >= FULL_LEVEL:
+                st.error(f"The bin reached the {FULL_LEVEL:.0f}% collection level. Collect now.")
+            elif fill >= SOON_LEVEL:
+                st.warning("Collect soon: the bin is close to the collection level.")
             else:
+                st.success("No collection needed yet.")
+                hours, since = predict_hours(metrics, fill, weight, now, last_collection)
                 h, m = int(hours), int(round((hours % 1) * 60))
-                st.metric("Estimated time until full", f"{h} h {m} min")
-                st.write(f"Expected full around **{(now + dt.timedelta(hours=hours)):%a %d %b, %H:%M}**")
-                if hours <= 6:
-                    st.warning("Collect soon.")
-                else:
-                    st.success("No urgent collection needed.")
-                result = f"{h} h {m} min"
+                st.caption(f"Model estimate (Multiple Linear Regression): about {h} h {m} min until the bin "
+                           f"reaches the {FULL_LEVEL:.0f}% collection level.")
             st.session_state.history.append({
-                "Time": f"{now:%d %b %H:%M}", "Fill %": fill, "Weight kg": weight})
+                "Time": f"{now:%d %b %H:%M}", "Weight kg": weight, "Fill %": fill, "Remaining %": round(remaining, 1)})
 
     if st.session_state.history:
         st.markdown("**This session**")
@@ -94,7 +103,10 @@ with tab1:
 with tab2:
     st.write(f"**Data source:** {metrics['data_source']}  |  **Rows used:** {metrics['rows']}")
     st.write(f"**Weight:** {metrics['weight']}")
-    st.write(f"Bin counts as full at **{FULL_LEVEL:.0f}%**.")
+    st.write(f"Bin capacity: **{metrics.get('bin_capacity_kg', 200):.0f} kg** (= 100% fill). Collection level: **{FULL_LEVEL:.0f}%**.")
+    if metrics.get("calibrated"):
+        st.caption(f"Fill % means percent of the bin's capacity. In this dataset a sensor reading of "
+                   f"{metrics['raw_capacity_pct']}% (the bin's usual weekly peak) counts as 100%.")
     st.markdown("**Test-set results (hours)**")
     st.dataframe(pd.DataFrame({"Baseline (fill % only)": metrics["baseline"],
                                "MLR (all features)": metrics["mlr"],
@@ -116,8 +128,9 @@ with tab3:
         st.caption("The Predict and Model tabs still work. Check DATABASE_URL in the app's Secrets.")
     else:
         if mode == "sqlite":
-            st.info("Demo mode: PostgreSQL is connected, so this tab shows to Admin bundled read-only copy of the data and a downloadable .csv file. "
-                    "You don't need to Signup insteady you have to Login by Credential registered in Manage app, Settings, Secrets.")
+            st.info("Demo mode: PostgreSQL is not connected, so this tab shows the bundled read-only copy of the data "
+                    "and a downloadable CSV file. There is no sign-up: log in with the admin credentials saved in "
+                    "the app's Secrets.")
         can_login = mode == "postgres" or db.demo_login_configured()
         if not can_login:
             st.warning("Admin login is not set up. Add APP_ADMIN_USER and APP_ADMIN_PASSWORD to the app's Secrets.")

@@ -1,30 +1,33 @@
 {
   "data_source": "Kaggle smart-city dataset (waste sensors)",
-  "rows": 14295,
-  "full_level_pct": 46.0,
+  "rows": 13342,
+  "full_level_pct": 80.0,
+  "raw_capacity_pct": 54.4,
+  "calibrated": true,
+  "bin_capacity_kg": 200,
   "weight": "simulated from fill %",
   "baseline": {
-    "MAE_h": 12.93,
+    "MAE_h": 13.02,
     "RMSE_h": 16.31,
-    "R2": 0.857
+    "R2": 0.835
   },
   "mlr": {
-    "MAE_h": 4.81,
-    "RMSE_h": 6.28,
-    "R2": 0.979
+    "MAE_h": 5.44,
+    "RMSE_h": 6.48,
+    "R2": 0.974
   },
   "ridge": {
-    "MAE_h": 4.81,
-    "RMSE_h": 6.29,
-    "R2": 0.979
+    "MAE_h": 5.44,
+    "RMSE_h": 6.48,
+    "R2": 0.974
   },
   "coefficients": {
-    "fill_pct": -0.007456869443470706,
-    "weight_kg": 0.027236093095627578,
-    "hours_since_collection": -0.9917927238071238,
-    "avg_fill_rate": -0.06599761882216242,
-    "hour": 0.007094057021092858,
-    "is_weekend": 1.130828528884999
+    "fill_pct": 0.02564654468633554,
+    "weight_kg": -0.01097647865158835,
+    "hours_since_collection": -0.9980021603427925,
+    "avg_fill_rate": -0.09501043573499185,
+    "hour": 0.03229733496070234,
+    "is_weekend": 2.0373428505387032
   },
-  "intercept": 148.650939939222
+  "intercept": 138.7251836013096
 }
