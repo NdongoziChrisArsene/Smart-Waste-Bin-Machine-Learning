@@ -8,6 +8,14 @@ import streamlit as st
 import db
 
 ART = Path(__file__).parent / "artifacts"
+KIGALI = dt.timezone(dt.timedelta(hours=2), "CAT")        # Kigali, Rwanda: UTC+2 all year (no daylight saving)
+
+
+def kigali_now():
+    """Current time in Kigali. The hosted server runs on UTC, so dt.datetime.now() would be 2 hours behind."""
+    return dt.datetime.now(KIGALI).replace(tzinfo=None)
+
+
 st.set_page_config(page_title="Smart Waste-Bin", page_icon="🗑️", layout="centered")
 
 
@@ -61,18 +69,21 @@ with tab1:
     st.progress(min(fill / 100, 1.0), text=f"{weight:.0f} kg of {CAP_KG:.0f} kg")
 
     st.markdown("**Current collection (the current level of the waste in the bin)**")
+    st.caption(f"Current time in Kigali: {kigali_now():%a %d %b %Y, %H:%M}")
+    if "default_last" not in st.session_state:                 # fixed once per visit, so the inputs are not reset
+        st.session_state.default_last = kigali_now().replace(second=0, microsecond=0) - dt.timedelta(hours=24)
+        st.session_state.default_now_time = kigali_now().time().replace(second=0, microsecond=0)
     d1, d2 = st.columns(2)
-    default_last = dt.datetime.now() - dt.timedelta(hours=24)
-    last_date = d1.date_input("Date", default_last.date())
-    last_time = d2.time_input("Time", default_last.time().replace(second=0, microsecond=0))
+    last_date = d1.date_input("Date", st.session_state.default_last.date())
+    last_time = d2.time_input("Time", st.session_state.default_last.time())
 
-    use_now = st.checkbox("Use current time as 'now'", value=True)
+    use_now = st.checkbox("Use current Kigali time as 'now'", value=True)
     if use_now:
-        now = dt.datetime.now()
+        now = kigali_now()
     else:
         n1, n2 = st.columns(2)
-        now = dt.datetime.combine(n1.date_input("Now: date", dt.date.today()),
-                                  n2.time_input("Now: time", dt.datetime.now().time().replace(second=0, microsecond=0)))
+        now = dt.datetime.combine(n1.date_input("Now: date", kigali_now().date()),
+                                  n2.time_input("Now: time", st.session_state.default_now_time))
     last_collection = dt.datetime.combine(last_date, last_time)
 
     if st.button("Predict remaining level", type="primary"):
